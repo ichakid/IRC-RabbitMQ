@@ -13,3 +13,9 @@ hs_err_pid*
 
 #build
 target/
+ChatClient/.classpath
+ChatClient/.settings
+ChatClient/.project
+ChatServer/.classpath
+ChatServer/.settings
+ChatClient/.project
