@@ -11,9 +11,14 @@ import java.util.List;
 
 
 public class Server {
-	private static final String EXCHANGE_NAME = "exchange";
-	private static final String REQ_QUEUE_NAME = "req_queue";
-	private static final String INIT_QUEUE_NAME = "init_queue";
+	private static final String host = "167.205.32.46";
+	private static final int port = 5672;
+	
+	private static final String prefix = "13512084_";
+	
+	private static final String EXCHANGE_NAME = prefix + "exchange";
+	private static final String REQ_QUEUE_NAME = prefix + "req_queue";
+	private static final String INIT_QUEUE_NAME = prefix + "init_queue";
 	
 	private Connection connection;
 	private Channel channel;
@@ -29,7 +34,8 @@ public class Server {
 		channels = new ArrayList<String>();
 		
 		ConnectionFactory factory = new ConnectionFactory();
-		factory.setHost("localhost");
+		factory.setHost(host);
+		factory.setPort(port);
 
 		connection = factory.newConnection();
 		channel = connection.createChannel();
@@ -85,7 +91,7 @@ public class Server {
 			default:
 				response = sendMessage(client, request); break;
 		}
-	    channel.basicPublish("", client, null, response.getBytes());
+	    channel.basicPublish("", prefix + client, null, response.getBytes());
 	}
 	
 	private String key(){
@@ -106,20 +112,30 @@ public class Server {
 		return "Your nick is " + nick;
 	}
 
-	private String join(String client, String bindKey) throws IOException{
-		if (bindKey.isEmpty()){
-			bindKey = "channel" + channels.size();
+	private String join(String client, String channelName){
+		if (channelName.isEmpty()){
+			channelName = "channel" + channels.size();
 		}
-		if (!channels.contains(bindKey)){
-			channels.add(bindKey);
+		if (!channels.contains(channelName)){
+			channels.add(channelName);
 		}
-		channel.queueBind(client, EXCHANGE_NAME, bindKey);
-		return "Join channel " + bindKey;
+		try {
+			channel.queueBind(prefix + client, EXCHANGE_NAME, prefix + channelName);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return "Failed to join channel " + channelName;
+		}
+		return "Join channel " + channelName;
 	}
 	
-	private String leave(String client, String bindKey) throws IOException {
-		channel.queueUnbind(client, EXCHANGE_NAME, bindKey);
-		return "Leave channel " + bindKey;
+	private String leave(String client, String channelName){
+		try {
+			channel.queueUnbind(prefix + client, EXCHANGE_NAME, prefix + channelName);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return "Failed to leave channel " + channelName;
+		}
+		return "Leave channel " + channelName;
 	}
 
 	private String exit(String client) {
@@ -129,7 +145,7 @@ public class Server {
 		return "exited";
 	}
 	
-	private String sendMessage(String client, String message) throws IOException {
+	private String sendMessage(String client, String message){
 		String sender = nicks.get(users.indexOf(client));
 		if (message.startsWith("@")){
 			String chName = null;
@@ -142,13 +158,23 @@ public class Server {
 			message = "[" + chName + "] " 
 					+ "(" + sender + ") " 
 					+ msg;
-			channel.basicPublish(EXCHANGE_NAME, chName, null, message.getBytes());
+			try {
+				channel.basicPublish(EXCHANGE_NAME, prefix + chName, null, message.getBytes());
+			} catch (IOException e) {
+				e.printStackTrace();
+				return "Failed to send mesage";
+			}
 		} else {
-			for (String c : channels){
-				String msg = "[" + c + "] " 
+			for (String chName : channels){
+				String msg = "[" + chName + "] " 
 						+ "(" + sender + ") " 
 						+ message;
-				channel.basicPublish(EXCHANGE_NAME, c, null, msg.getBytes());
+				try {
+					channel.basicPublish(EXCHANGE_NAME, prefix + chName, null, msg.getBytes());
+				} catch (IOException e) {
+					e.printStackTrace();
+					return "Failed to send mesage";
+				}
 			}
 		}
 		return "Delivered";

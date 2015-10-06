@@ -8,10 +8,16 @@ import com.rabbitmq.client.GetResponse;
 import com.rabbitmq.client.QueueingConsumer;
 
 public class Client {
-	private static final String REQ_QUEUE_NAME = "req_queue";
-	private static final String INIT_QUEUE_NAME = "init_queue";
+	private static final String host = "167.205.32.46";
+	private static final int port = 5672;
+	
+	private static final String prefix = "13512084_";
+	
+	private static final String REQ_QUEUE_NAME = prefix + "req_queue";
+	private static final String INIT_QUEUE_NAME = prefix + "init_queue";
 	
 	private String clientKey;
+	private String clientQueue;
 	private Connection connection;
 	private Channel channel;
 	private QueueingConsumer consumer;
@@ -19,7 +25,8 @@ public class Client {
 	
 	public Client() throws Exception{
 	    ConnectionFactory factory = new ConnectionFactory();
-	    factory.setHost("localhost");
+	    factory.setHost(host);
+	    factory.setPort(port);
 	    connection = factory.newConnection();
 	    channel = connection.createChannel();
 	    
@@ -35,9 +42,10 @@ public class Client {
 	    	}
 	    }
 	    
+	    clientQueue = prefix + clientKey;
 	    consumer = new QueueingConsumer(channel);
-	    channel.queueDeclare(clientKey, false, false, false, null);
-	    channel.basicConsume(clientKey, consumer);
+	    channel.queueDeclare(clientQueue, false, false, false, null);
+	    channel.basicConsume(clientQueue, consumer);
 	    running = true;
 	}
 	
@@ -75,6 +83,7 @@ public class Client {
 			receiver.join();
 		} catch (InterruptedException e) {
 			e.printStackTrace();
+			close();
 		} finally {
 			close();
 		}
@@ -106,6 +115,7 @@ public class Client {
 
 	private void close() {
 	    try {
+	    	channel.queueDelete(clientQueue);
 	    	channel.close();
 			connection.close();
 		    System.out.println("Client is stopping ...");
