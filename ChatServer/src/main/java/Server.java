@@ -8,10 +8,12 @@ import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 
 public class Server {
-	private static final String host = "167.205.32.46";
+//	private static final String host = "167.205.32.46";
+	private static final String host = "localhost";
 	private static final int port = 5672;
 	
 	private static final String prefix = "13512084_";
@@ -23,6 +25,7 @@ public class Server {
 	private Connection connection;
 	private Channel channel;
 	private QueueingConsumer consumer;
+	private boolean running;
 	
 	private List<String> users;
 	private List<String> nicks;
@@ -48,18 +51,56 @@ public class Server {
 
 		consumer = new QueueingConsumer(channel);
 		channel.basicConsume(REQ_QUEUE_NAME, false, consumer);
+		running = true;
 	}
 	
-	public void start() throws Exception {
-		System.out.println("Server is starting ...");
-		while (true) {
-		    QueueingConsumer.Delivery delivery = consumer.nextDelivery();
-		    String request = new String(delivery.getBody());
-		    if (!request.isEmpty()){
-		    	handleRequest(request, delivery.getProperties().getReplyTo(),
-		    			delivery.getEnvelope().getDeliveryTag());
-		    }
+	public void run() {
+		Thread server = new Thread(){
+			@Override
+			public void run() {
+				System.out.println("Server is starting ...");
+				while (running) {
+					try {
+						serve();
+					} catch (Exception e) {
+						e.printStackTrace();
+						running = false;
+					}
+				}
+			}
+		};
+		Thread command = new Thread(){
+			@Override
+			public void run() {
+				while (running) {
+					Scanner in = new Scanner(System.in);
+					String cmd = in.nextLine();
+					if (cmd.equals("exit")) {
+						running = false;
+					}
+				}
+			}
+		};
+		server.start();
+		command.start();
+		try {
+			server.join();
+			command.join();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+			close();
+		} finally {
+			System.exit(0);
 		}
+	}
+	
+	public void serve() throws Exception {
+	    QueueingConsumer.Delivery delivery = consumer.nextDelivery();
+	    String request = new String(delivery.getBody());
+	    if (!request.isEmpty()){
+	    	handleRequest(request, delivery.getProperties().getReplyTo(),
+	    			delivery.getEnvelope().getDeliveryTag());
+	    }
 	}
 	
 	private void handleRequest(String request, String client, long tag) throws IOException {
@@ -180,17 +221,21 @@ public class Server {
 		return "Delivered";
 	}
 	
-	public void stop() throws Exception {
-	    connection.close();
-	    System.out.println("Server is stopping ...");
+	private void close() {
+	    try {
+			connection.close();
+			channel.close();
+		    System.out.println("Server is stopping ...");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 	public static void main(String[] args) {
 		Server server;
 		try {
 			server = new Server();
-			server.start();
-			server.stop();
+			server.run();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

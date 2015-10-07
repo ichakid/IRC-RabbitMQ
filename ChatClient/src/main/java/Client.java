@@ -85,7 +85,7 @@ public class Client {
 			e.printStackTrace();
 			close();
 		} finally {
-			close();
+			System.exit(0);
 		}
 	}
 	
