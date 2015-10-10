@@ -9,11 +9,12 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 public class Server {
-//	private static final String host = "167.205.32.46";
-	private static final String host = "localhost";
+	private static final String host = "167.205.32.46";
+//	private static final String host = "localhost";
 	private static final int port = 5672;
 	
 	private static final String prefix = "13512084_";
@@ -25,7 +26,7 @@ public class Server {
 	private Connection connection;
 	private Channel channel;
 	private QueueingConsumer consumer;
-	private boolean running;
+	private final AtomicBoolean running = new AtomicBoolean(true);
 	
 	private List<String> users;
 	private List<String> nicks;
@@ -36,6 +37,9 @@ public class Server {
 		nicks = new ArrayList<String>();
 		channels = new ArrayList<String>();
 		
+		System.out.println("Connecting to message broker at " 
+				+ host + ":" + port);
+		
 		ConnectionFactory factory = new ConnectionFactory();
 		factory.setHost(host);
 		factory.setPort(port);
@@ -43,40 +47,44 @@ public class Server {
 		connection = factory.newConnection();
 		channel = connection.createChannel();
 		
-		channel.exchangeDeclare(EXCHANGE_NAME, "direct");
-		channel.queueDeclare(REQ_QUEUE_NAME, false, false, false, null);
-		channel.queueDeclare(INIT_QUEUE_NAME, false, false, false, null);
+		channel.exchangeDelete(EXCHANGE_NAME);
+		channel.queueDelete(INIT_QUEUE_NAME);
+		channel.queueDelete(REQ_QUEUE_NAME);
+		
+		channel.exchangeDeclare(EXCHANGE_NAME, "direct", false, true, null);
+		channel.queueDeclare(REQ_QUEUE_NAME, false, true, true, null);
+		channel.queueDeclare(INIT_QUEUE_NAME, false, false, true, null);
 
 		channel.basicQos(1);
 
 		consumer = new QueueingConsumer(channel);
 		channel.basicConsume(REQ_QUEUE_NAME, false, consumer);
-		running = true;
 	}
 	
 	public void run() {
-		Thread server = new Thread(){
+		final Thread server = new Thread(){
 			@Override
 			public void run() {
 				System.out.println("Server is starting ...");
-				while (running) {
+				while (running.get()) {
 					try {
 						serve();
 					} catch (Exception e) {
 						e.printStackTrace();
-						running = false;
 					}
 				}
 			}
 		};
-		Thread command = new Thread(){
+		final Thread command = new Thread(){
 			@Override
 			public void run() {
-				while (running) {
+				while (running.get()) {
 					Scanner in = new Scanner(System.in);
 					String cmd = in.nextLine();
+
 					if (cmd.equals("exit")) {
-						running = false;
+						running.set(false);
+						server.interrupt();
 					}
 				}
 			}
@@ -87,9 +95,8 @@ public class Server {
 			server.join();
 			command.join();
 		} catch (InterruptedException e) {
-			e.printStackTrace();
-			close();
 		} finally {
+			close();
 			System.exit(0);
 		}
 	}
@@ -118,21 +125,26 @@ public class Server {
 					response = nick(client, split[1]); 
 				else
 					response = nick(client, ""); 
+				client = prefix + client;
 				break;
 			case "/JOIN":	
 				if (split.length > 1)
 					response = join(client, split[1]); 
 				else
 					response = join(client, ""); 
+				client = prefix + client; 
 				break;
 			case "/LEAVE":
-				response = leave(client, split[1]); break;
+				response = leave(client, split[1]); 
+				client = prefix + client; break;
 			case "/EXIT": 	
-				response = exit(client); break;
+				response = exit(client); 
+				client = prefix + client; break;
 			default:
-				response = sendMessage(client, request); break;
+				response = sendMessage(client, request); 
+				client = prefix + client; break;
 		}
-	    channel.basicPublish("", prefix + client, null, response.getBytes());
+	    channel.basicPublish("", client, null, response.getBytes());
 	}
 	
 	private String key(){
@@ -223,9 +235,11 @@ public class Server {
 	
 	private void close() {
 	    try {
-			connection.close();
+	    	channel.queueDelete(INIT_QUEUE_NAME);
+	    	channel.exchangeDelete(EXCHANGE_NAME);
 			channel.close();
-		    System.out.println("Server is stopping ...");
+			connection.close();
+		    System.out.println("Server stopped");
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

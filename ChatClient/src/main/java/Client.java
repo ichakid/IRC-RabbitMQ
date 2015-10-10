@@ -1,4 +1,5 @@
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
@@ -9,6 +10,7 @@ import com.rabbitmq.client.QueueingConsumer;
 
 public class Client {
 	private static final String host = "167.205.32.46";
+//	private static final String host = "localhost";
 	private static final int port = 5672;
 	
 	private static final String prefix = "13512084_";
@@ -21,7 +23,7 @@ public class Client {
 	private Connection connection;
 	private Channel channel;
 	private QueueingConsumer consumer;
-	public static boolean running;
+	private final AtomicBoolean running = new AtomicBoolean(true);
 	
 	public Client() throws Exception{
 	    ConnectionFactory factory = new ConnectionFactory();
@@ -33,7 +35,7 @@ public class Client {
 	    request("/KEY");
 	    System.out.println("Connecting to server ...");
 	    while(true) {
-	    	GetResponse response = channel.basicGet(INIT_QUEUE_NAME, false);
+	    	GetResponse response = channel.basicGet(INIT_QUEUE_NAME, true);
 	    	if (response != null){
 	    		clientKey = new String(response.getBody());
 	    		System.out.println("Connected");
@@ -44,32 +46,36 @@ public class Client {
 	    
 	    clientQueue = prefix + clientKey;
 	    consumer = new QueueingConsumer(channel);
-	    channel.queueDeclare(clientQueue, false, false, false, null);
+	    channel.queueDeclare(clientQueue, false, true, true, null);
 	    channel.basicConsume(clientQueue, consumer);
-	    running = true;
 	}
 	
 	public void run() {
-		Thread receiver = new Thread(){
+		final Thread sender = new Thread(){
 			@Override
 			public void run() {
-				while (running) {
+				while (running.get()) {
 					try {
-						receive();
+						System.out.println("command");
+						Scanner input = new Scanner(System.in);
+						String command = input.nextLine();
+						request(command);
+						Thread.sleep(500);
 					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				}
 			}
 		};
-		Thread sender = new Thread(){
+		final Thread receiver = new Thread(){
 			@Override
 			public void run() {
-				while (running) {
+				while (running.get()) {
 					try {
-						Scanner input = new Scanner(System.in);
-						String command = input.nextLine();
-						request(command);
+						receive();
+						if (!running.get()) {
+							System.out.println("stop");
+						}
 					} catch (Exception e) {
 						e.printStackTrace();
 					}
@@ -82,9 +88,8 @@ public class Client {
 			sender.join();
 			receiver.join();
 		} catch (InterruptedException e) {
-			e.printStackTrace();
-			close();
 		} finally {
+			close();
 			System.exit(0);
 		}
 	}
@@ -106,7 +111,7 @@ public class Client {
 	    String response = new String(delivery.getBody());
 	    if (!response.isEmpty()){
 	    	if(response.equals("exited")){
-	    		running = false;
+	    		running.set(false);
 	    	}
 	    	System.out.println(response);
 	    }
@@ -115,10 +120,9 @@ public class Client {
 
 	private void close() {
 	    try {
-	    	channel.queueDelete(clientQueue);
 	    	channel.close();
 			connection.close();
-		    System.out.println("Client is stopping ...");
+		    System.out.println("Client stopped");
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
