@@ -47,12 +47,14 @@ public class Server {
 		connection = factory.newConnection();
 		channel = connection.createChannel();
 		
-		channel.exchangeDelete(EXCHANGE_NAME);
-		channel.queueDelete(INIT_QUEUE_NAME);
-		channel.queueDelete(REQ_QUEUE_NAME);
+//		try {
+//			channel.exchangeDelete(EXCHANGE_NAME);
+//			channel.queueDelete(INIT_QUEUE_NAME);
+//			channel.queueDelete(REQ_QUEUE_NAME);
+//		} catch (Exception e) {}
 		
-		channel.exchangeDeclare(EXCHANGE_NAME, "direct", false, true, null);
-		channel.queueDeclare(REQ_QUEUE_NAME, false, true, true, null);
+		channel.exchangeDeclare(EXCHANGE_NAME, "direct");
+		channel.queueDeclare(REQ_QUEUE_NAME, false, false, true, null);
 		channel.queueDeclare(INIT_QUEUE_NAME, false, false, true, null);
 
 		channel.basicQos(1);
@@ -169,11 +171,12 @@ public class Server {
 		if (channelName.isEmpty()){
 			channelName = "channel" + channels.size();
 		}
+		
 		if (!channels.contains(channelName)){
 			channels.add(channelName);
 		}
 		try {
-			channel.queueBind(prefix + client, EXCHANGE_NAME, prefix + channelName);
+			channel.queueBind(prefix + client, EXCHANGE_NAME, prefix + "channel_" + channelName);
 		} catch (IOException e) {
 			e.printStackTrace();
 			return "Failed to join channel " + channelName;
@@ -183,7 +186,7 @@ public class Server {
 	
 	private String leave(String client, String channelName){
 		try {
-			channel.queueUnbind(prefix + client, EXCHANGE_NAME, prefix + channelName);
+			channel.queueUnbind(prefix + client, EXCHANGE_NAME, prefix + "channel_" + channelName);
 		} catch (IOException e) {
 			e.printStackTrace();
 			return "Failed to leave channel " + channelName;
@@ -212,7 +215,7 @@ public class Server {
 					+ "(" + sender + ") " 
 					+ msg;
 			try {
-				channel.basicPublish(EXCHANGE_NAME, prefix + chName, null, message.getBytes());
+				channel.basicPublish(EXCHANGE_NAME, prefix + "channel_" + chName, null, message.getBytes());
 			} catch (IOException e) {
 				e.printStackTrace();
 				return "Failed to send mesage";
@@ -223,7 +226,7 @@ public class Server {
 						+ "(" + sender + ") " 
 						+ message;
 				try {
-					channel.basicPublish(EXCHANGE_NAME, prefix + chName, null, msg.getBytes());
+					channel.basicPublish(EXCHANGE_NAME, prefix + "channel_" + chName, null, msg.getBytes());
 				} catch (IOException e) {
 					e.printStackTrace();
 					return "Failed to send mesage";

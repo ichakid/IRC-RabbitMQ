@@ -46,7 +46,7 @@ public class Client {
 	    
 	    clientQueue = prefix + clientKey;
 	    consumer = new QueueingConsumer(channel);
-	    channel.queueDeclare(clientQueue, false, true, true, null);
+	    channel.queueDeclare(clientQueue, false, false, true, null);
 	    channel.basicConsume(clientQueue, consumer);
 	}
 	
@@ -56,7 +56,6 @@ public class Client {
 			public void run() {
 				while (running.get()) {
 					try {
-						System.out.println("command");
 						Scanner input = new Scanner(System.in);
 						String command = input.nextLine();
 						request(command);
@@ -120,6 +119,7 @@ public class Client {
 
 	private void close() {
 	    try {
+	    	channel.queueDelete(clientQueue);
 	    	channel.close();
 			connection.close();
 		    System.out.println("Client stopped");
